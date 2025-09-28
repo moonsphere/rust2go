@@ -15,7 +15,7 @@ parking_lot = "0.12"
 libc = "0.2"
 
 # Monoio
-monoio = { workspace = true, features = ["poll-io"], optional = true }
+monoio = { version = "0.2.4", features = ["poll-io"], optional = true }
 local-sync = { version = "0.1", optional = true }
 
 # Tokio

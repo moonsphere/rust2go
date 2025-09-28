@@ -6,8 +6,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"unsafe"
-
-	"github.com/edwingeng/deque/v2"
 )
 
 type QueueMeta struct {
@@ -40,7 +38,7 @@ type ReadQueue[T any] struct {
 type WriteQueue[T any] struct {
 	q               Queue[T]
 	Lock            *sync.Mutex
-	pendingTasks    *deque.Deque[T]
+	pendingTasks    *Deque[T]
 	workingNotifier Notifier
 }
 
@@ -140,7 +138,7 @@ func (q Queue[T]) Write() WriteQueue[T] {
 	wq := WriteQueue[T]{
 		q:               q,
 		Lock:            &sync.Mutex{},
-		pendingTasks:    deque.NewDeque[T](),
+		pendingTasks:    NewDeque[T](),
 		workingNotifier: NewNotifier(q.workingFd),
 	}
 	go func() {
