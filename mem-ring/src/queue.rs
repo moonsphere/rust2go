@@ -8,6 +8,7 @@ use std::{
     os::fd::RawFd,
     sync::atomic::{AtomicU32, AtomicU64, Ordering},
     task::Waker,
+    time::{Duration, Instant},
 };
 
 #[cfg(not(all(feature = "monoio", feature = "tpc")))]
@@ -93,7 +94,7 @@ impl<T> ReadQueue<T> {
         mut handler: impl FnMut(T),
         mut tx: Sender<()>,
     ) {
-        const YIELD_CNT: u8 = 3;
+        const WARM_DURATION: Duration = Duration::from_micros(200);
         let mut exit = std::pin::pin!(tx.closed());
         self.queue.mark_working();
 
@@ -102,10 +103,19 @@ impl<T> ReadQueue<T> {
                 handler(item);
             }
 
-            for _ in 0..YIELD_CNT {
+            let mut warm_deadline = Instant::now() + WARM_DURATION;
+            loop {
+                if Instant::now() >= warm_deadline {
+                    break;
+                }
                 yield_now().await;
-                if !self.queue.is_empty() {
+                if let Some(item) = self.pop() {
+                    handler(item);
+                    warm_deadline = Instant::now() + WARM_DURATION;
                     continue 'p;
+                }
+                if !self.queue.is_empty() {
+                    warm_deadline = Instant::now() + WARM_DURATION;
                 }
             }
 
@@ -132,7 +142,7 @@ impl<T> ReadQueue<T> {
     ) where
         T: Send,
     {
-        const YIELD_CNT: u8 = 3;
+        const WARM_DURATION: Duration = Duration::from_micros(200);
         let mut exit = std::pin::pin!(tx.closed());
         self.queue.mark_working();
 
@@ -141,10 +151,19 @@ impl<T> ReadQueue<T> {
                 handler(item);
             }
 
-            for _ in 0..YIELD_CNT {
+            let mut warm_deadline = Instant::now() + WARM_DURATION;
+            loop {
+                if Instant::now() >= warm_deadline {
+                    break;
+                }
                 yield_now().await;
-                if !self.queue.is_empty() {
+                if let Some(item) = self.pop() {
+                    handler(item);
+                    warm_deadline = Instant::now() + WARM_DURATION;
                     continue 'p;
+                }
+                if !self.queue.is_empty() {
+                    warm_deadline = Instant::now() + WARM_DURATION;
                 }
             }
 

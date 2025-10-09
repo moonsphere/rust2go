@@ -14,7 +14,56 @@ use {std::os::unix::io::OwnedFd, tokio::io::unix::AsyncFd};
 #[cfg(feature = "monoio")]
 compile_error!("mem-ring monoio feature should be disabled for this build");
 
+#[cfg(target_os = "linux")]
 pub(crate) fn new_pair() -> Result<(RawFd, RawFd), Error> {
+    new_eventfd_pair()
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn new_pair() -> Result<(RawFd, RawFd), Error> {
+    new_socketpair()
+}
+
+#[cfg(target_os = "linux")]
+fn new_eventfd_pair() -> Result<(RawFd, RawFd), Error> {
+    let fd = unsafe { libc::eventfd(0, libc::EFD_CLOEXEC | libc::EFD_NONBLOCK) };
+    if fd < 0 {
+        return Err(Error::last_os_error());
+    }
+
+    let peer = unsafe { libc::dup(fd) };
+    if peer < 0 {
+        let err = Error::last_os_error();
+        unsafe {
+            libc::close(fd);
+        }
+        return Err(err);
+    }
+
+    unsafe {
+        if libc::fcntl(peer, libc::F_SETFD, libc::FD_CLOEXEC) == -1 {
+            let err = Error::last_os_error();
+            libc::close(peer);
+            libc::close(fd);
+            return Err(err);
+        }
+
+        let current_flags = libc::fcntl(peer, libc::F_GETFL);
+        if current_flags == -1
+            || libc::fcntl(peer, libc::F_SETFL, current_flags & !libc::O_NONBLOCK) == -1
+        {
+            let err = Error::last_os_error();
+            libc::close(peer);
+            libc::close(fd);
+            return Err(err);
+        }
+    }
+
+    Ok((fd, peer))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn new_socketpair() -> Result<(RawFd, RawFd), Error> {
     // create unix stream pair
     let mut fds = [-1; 2];
     #[cfg(any(
@@ -126,6 +175,31 @@ impl Notifier {
         Self { fd }
     }
 
+    #[cfg(target_os = "linux")]
+    pub(crate) fn notify(&self) -> Result<(), Error> {
+        const DATA: u64 = 1;
+        let bytes = DATA.to_ne_bytes();
+        loop {
+            let written = unsafe {
+                libc::write(
+                    self.fd,
+                    bytes.as_ptr() as *const libc::c_void,
+                    bytes.len(),
+                )
+            };
+            if written as usize == bytes.len() {
+                return Ok(());
+            }
+
+            let err = Error::last_os_error();
+            match err.kind() {
+                ErrorKind::Interrupted | ErrorKind::WouldBlock => continue,
+                _ => return Err(err),
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
     pub(crate) fn notify(&self) -> Result<(), Error> {
         const DATA: u8 = 0;
         loop {
