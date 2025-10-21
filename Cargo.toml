@@ -1,30 +1,23 @@
-[workspace]
-members = [
-    "rust2go",
-    "rust2go-cli",
-    "rust2go-macro",
-    "rust2go-common",
-    "rust2go-mem-ffi",
-    "rust2go-convert",
-    "mem-ring",
-    "examples/example-monoio",
-    "examples/example-tokio",
-    "examples/example-monoio-mem",
-    "examples/example-tokio-mem",
-    "examples/example-bidirectional",
-    "examples/example-go2rust/rust-lib",
-    "test",
-]
-resolver = "2"
-
-[workspace.package]
+[package]
+name = "mem-ring"
+version = "0.2.0"
+description = "Across-thread queue based on shared memory"
 authors = ["ihciah <ihciah@gmail.com>"]
 categories = ["development-tools::ffi", "external-ffi-bindings"]
-description = "Async Calling Between Go and Rust with FFI."
 edition = "2021"
 keywords = ["ffi", "golang", "go", "async"]
 license = "MIT/Apache-2.0"
 repository = "https://github.com/ihciah/rust2go"
 
-[workspace.dependencies]
-monoio = { version = "0.2.4" }
+[dependencies]
+parking_lot = "0.12"
+libc = "0.2"
+
+# Tokio
+tokio = { version = "1", features = [
+    "rt",
+    "sync",
+    "net",
+    "macros",
+    "time",
+], default-features = false }

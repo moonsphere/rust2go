@@ -1,6 +1,2 @@
 /target
 /perf-data
-/examples/example-go2rust/example-go2rust
-/examples/example-go2rust/librust_lib.a
-
-*.bak
