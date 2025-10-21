@@ -3,13 +3,13 @@
 use std::{
     collections::VecDeque,
     future::Future,
+    hint::spin_loop,
     io,
     mem::{self, MaybeUninit},
     os::fd::RawFd,
     sync::atomic::{AtomicU32, AtomicU64, Ordering},
     sync::Arc,
     task::Waker,
-    time::{Duration, Instant},
 };
 
 use parking_lot::Mutex;
@@ -65,7 +65,8 @@ impl<T> ReadQueue<T> {
     ) where
         T: Send,
     {
-        const WARM_DURATION: Duration = Duration::from_micros(200);
+        const WARM_SPIN_LIMIT: usize = 1024;
+        const WARM_SPIN_YIELD_INTERVAL: usize = 64;
         let mut exit = std::pin::pin!(tx.closed());
         self.queue.mark_working();
 
@@ -74,18 +75,26 @@ impl<T> ReadQueue<T> {
                 handler(item);
             }
 
-            let mut warm_deadline = Instant::now() + WARM_DURATION;
-            loop {
-                if Instant::now() >= warm_deadline {
-                    break;
-                }
-                yield_now().await;
+            let mut spin_budget = WARM_SPIN_LIMIT;
+            let mut yield_budget = WARM_SPIN_YIELD_INTERVAL;
+            while spin_budget > 0 {
                 if let Some(item) = self.pop() {
                     handler(item);
                     continue 'p;
                 }
                 if !self.queue.is_empty() {
-                    warm_deadline = Instant::now() + WARM_DURATION;
+                    spin_budget = WARM_SPIN_LIMIT;
+                    yield_budget = WARM_SPIN_YIELD_INTERVAL;
+                    continue;
+                }
+
+                spin_budget -= 1;
+                if yield_budget == 0 {
+                    yield_now().await;
+                    yield_budget = WARM_SPIN_YIELD_INTERVAL;
+                } else {
+                    yield_budget -= 1;
+                    spin_loop();
                 }
             }
 
