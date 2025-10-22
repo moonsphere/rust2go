@@ -166,6 +166,7 @@ impl<T> WriteQueue<T> {
             waiter: None,
         };
         inner.pending_tasks.push_back(pending);
+        Self::log_write_state("push-to-pending", inner.debug_state());
         false
     }
 
@@ -185,6 +186,7 @@ impl<T> WriteQueue<T> {
             waiter: None,
         };
         inner.pending_tasks.push_back(pending);
+        Self::log_write_state("push-to-pending", inner.debug_state());
         false
     }
 
@@ -233,6 +235,7 @@ impl<T> WriteQueue<T> {
         };
 
         inner.pending_tasks.push_back(pending);
+        Self::log_write_state("push-to-pending", inner.debug_state());
         PushResult::Pending(PushJoinHandle { waker_slot })
     }
 
@@ -334,7 +337,7 @@ impl<T> WriteQueue<T> {
 
     fn log_write_state(reason: &str, state: DebugState) {
         println!(
-            "[rust][write][{reason}] queue_len={} pending_len={} working={} stuck={} full={}",
+            "[rust][write][{reason}] queue_len={} pending={} working={} stuck={} full={}",
             state.queue_len, state.pending_len, state.working, state.stuck, state.full
         );
     }

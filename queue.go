@@ -248,12 +248,13 @@ func (wq *WriteQueue[T]) Push(item T) {
 	} else {
 		wq.q.markStuck()
 		wq.pendingTasks.PushBack(item)
+		debugWriteStateLocked(wq, "push-to-pending")
 	}
 	wq.Lock.Unlock()
 }
 
 func debugWriteStateLocked[T any](wq *WriteQueue[T], reason string) {
-	fmt.Printf("[go][write][%s] queue_len=%d pending_len=%d working=%v stuck=%v full=%v\n",
+	fmt.Printf("[go][write][%s] queue_len=%d pending=%d working=%v stuck=%v full=%v\n",
 		reason, wq.q.len(), wq.pendingTasks.Len(), wq.q.working(), wq.q.stuck(), wq.q.isFull())
 }
 
