@@ -3,6 +3,7 @@
 package mem_ring
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -106,6 +107,10 @@ func (q *Queue[T]) isFull() bool {
 	return atomic.LoadUint64(q.tailPtr)-atomic.LoadUint64(q.headPtr) == uint64(q.bufferLen)
 }
 
+func (q *Queue[T]) len() uint64 {
+	return atomic.LoadUint64(q.tailPtr) - atomic.LoadUint64(q.headPtr)
+}
+
 func (q *Queue[T]) markWorking() {
 	atomic.StoreUint32(q.workingPtr, 1)
 }
@@ -163,14 +168,17 @@ func (q Queue[T]) Write() WriteQueue[T] {
 			if !wq.q.working() {
 				wq.q.markWorking()
 				wq.workingNotifier.Notify()
+				debugWriteStateLocked(&wq, "mark-working-and-notify")
 			}
 			if !wq.pendingTasks.IsEmpty() {
 				wq.q.markStuck()
 				if !wq.q.isFull() {
+					debugWriteStateLocked(&wq, "pending-continue")
 					wq.Lock.Unlock()
 					continue
 				}
 			}
+			debugWriteStateLocked(&wq, "before-wait")
 			wq.Lock.Unlock()
 			awaiter.Wait()
 		}
@@ -211,6 +219,7 @@ func (rq *ReadQueue[T]) RunHandler(handler func(T), w ...TinyWaiter) {
 			for {
 				stop_wait := waiter.Wait()
 				if !rq.q.isEmpty() || !rq.q.markUnworking() {
+					debugReadState(rq, "continue-active")
 					continue c
 				}
 				if stop_wait {
@@ -218,8 +227,10 @@ func (rq *ReadQueue[T]) RunHandler(handler func(T), w ...TinyWaiter) {
 				}
 			}
 
+			debugReadState(rq, "before-wait")
 			awaiter.Wait()
 			rq.q.markWorking()
+			debugReadState(rq, "after-wake")
 			waited = true
 		}
 	}()
@@ -239,4 +250,14 @@ func (wq *WriteQueue[T]) Push(item T) {
 		wq.pendingTasks.PushBack(item)
 	}
 	wq.Lock.Unlock()
+}
+
+func debugWriteStateLocked[T any](wq *WriteQueue[T], reason string) {
+	fmt.Printf("[go][write][%s] queue_len=%d pending_len=%d working=%v stuck=%v full=%v\n",
+		reason, wq.q.len(), wq.pendingTasks.Len(), wq.q.working(), wq.q.stuck(), wq.q.isFull())
+}
+
+func debugReadState[T any](rq *ReadQueue[T], reason string) {
+	fmt.Printf("[go][read][%s] queue_len=%d working=%v stuck=%v empty=%v\n",
+		reason, rq.q.len(), rq.q.working(), rq.q.stuck(), rq.q.isEmpty())
 }

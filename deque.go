@@ -37,3 +37,7 @@ func (d *Deque[T]) TryPopFront() (T, bool) {
 func (d *Deque[T]) IsEmpty() bool {
 	return len(d.items) == 0
 }
+
+func (d *Deque[T]) Len() int {
+	return len(d.items)
+}

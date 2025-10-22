@@ -34,6 +34,17 @@ impl<T> ReadQueue<T> {
         self.queue.meta()
     }
 
+    fn log_read_state(reason: &str, queue: &Queue<T>) {
+        println!(
+            "[rust][read][{reason}] queue_len={} working={} stuck={} full={} empty={}",
+            queue.len(),
+            queue.working(),
+            queue.stuck(),
+            queue.is_full(),
+            queue.is_empty()
+        );
+    }
+
     pub fn pop(&mut self) -> Option<T> {
         let maybe_item = self.queue.pop();
         if self.queue.stuck() {
@@ -99,16 +110,20 @@ impl<T> ReadQueue<T> {
             }
 
             if !self.queue.mark_unworking() {
+                Self::log_read_state("continue-active", &self.queue);
                 continue;
             }
 
+            Self::log_read_state("before-wait", &self.queue);
             select! {
                 _ = working_awaiter.wait() => (),
                 _ = &mut exit => {
+                    Self::log_read_state("exit", &self.queue);
                     return;
                 }
             }
             self.queue.mark_working();
+            Self::log_read_state("after-wake", &self.queue);
         }
     }
 }
@@ -224,6 +239,9 @@ impl<T> WriteQueue<T> {
     async fn unstuck_handler(self, mut unstuck_awaiter: Awaiter, mut tx: Sender<()>) {
         let mut exit = std::pin::pin!(tx.closed());
         loop {
+            let mut debug_state = None;
+            let mut debug_reason = "before-wait";
+            let mut skip_wait = false;
             {
                 let mut inner = self.inner.lock();
 
@@ -244,19 +262,36 @@ impl<T> WriteQueue<T> {
                 }
                 if !inner.queue.working() {
                     inner.queue.mark_working();
+                    debug_state = Some(inner.debug_state());
+                    debug_reason = "mark-working-and-notify";
                     let _ = self.working_notifier.notify();
                 }
                 if !inner.pending_tasks.is_empty() {
                     inner.queue.mark_stuck();
                     if !inner.queue.is_full() {
-                        continue;
+                        debug_state = Some(inner.debug_state());
+                        debug_reason = "pending-continue";
+                        skip_wait = true;
                     }
                 }
+                if debug_state.is_none() {
+                    debug_state = Some(inner.debug_state());
+                }
+            }
+
+            if let Some(state) = debug_state {
+                Self::log_write_state(debug_reason, state);
+            }
+
+            if skip_wait {
+                continue;
             }
 
             select! {
                 _ = unstuck_awaiter.wait() => (),
                 _ = &mut exit => {
+                    let state = self.inner.lock().debug_state();
+                    Self::log_write_state("exit", state);
                     return;
                 }
             }
@@ -270,10 +305,38 @@ pub struct WriteQueueInner<T> {
     _guard: Receiver<()>,
 }
 
+#[derive(Clone, Copy)]
+struct DebugState {
+    queue_len: usize,
+    pending_len: usize,
+    working: bool,
+    stuck: bool,
+    full: bool,
+}
+
+impl<T> WriteQueueInner<T> {
+    fn debug_state(&self) -> DebugState {
+        DebugState {
+            queue_len: self.queue.len(),
+            pending_len: self.pending_tasks.len(),
+            working: self.queue.working(),
+            stuck: self.queue.stuck(),
+            full: self.queue.is_full(),
+        }
+    }
+}
+
 impl<T> WriteQueue<T> {
     #[inline]
     pub fn meta(&self) -> QueueMeta {
         self.inner.lock().queue.meta()
+    }
+
+    fn log_write_state(reason: &str, state: DebugState) {
+        println!(
+            "[rust][write][{reason}] queue_len={} pending_len={} working={} stuck={} full={}",
+            state.queue_len, state.pending_len, state.working, state.stuck, state.full
+        );
     }
 }
 
