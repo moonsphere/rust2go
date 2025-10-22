@@ -35,6 +35,9 @@ impl<T> ReadQueue<T> {
     }
 
     fn log_read_state(reason: &str, queue: &Queue<T>) {
+        // if queue.is_empty() {
+        //     return;
+        // }
         println!(
             "[rust][read][{reason}] queue_len={} working={} stuck={} full={} empty={}",
             queue.len(),
@@ -110,7 +113,7 @@ impl<T> ReadQueue<T> {
             }
 
             if !self.queue.mark_unworking() {
-                Self::log_read_state("continue-active", &self.queue);
+                // Self::log_read_state("continue-active", &self.queue);
                 continue;
             }
 

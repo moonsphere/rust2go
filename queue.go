@@ -219,7 +219,7 @@ func (rq *ReadQueue[T]) RunHandler(handler func(T), w ...TinyWaiter) {
 			for {
 				stop_wait := waiter.Wait()
 				if !rq.q.isEmpty() || !rq.q.markUnworking() {
-					debugReadState(rq, "continue-active")
+					// debugReadState(rq, "continue-active")
 					continue c
 				}
 				if stop_wait {
@@ -259,6 +259,9 @@ func debugWriteStateLocked[T any](wq *WriteQueue[T], reason string) {
 }
 
 func debugReadState[T any](rq *ReadQueue[T], reason string) {
+	// if rq.q.isEmpty() {
+	// return
+	// }
 	fmt.Printf("[go][read][%s] queue_len=%d working=%v stuck=%v empty=%v\n",
 		reason, rq.q.len(), rq.q.working(), rq.q.stuck(), rq.q.isEmpty())
 }
