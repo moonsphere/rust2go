@@ -35,14 +35,14 @@ impl<T> ReadQueue<T> {
     }
 
     fn log_read_state(reason: &str, queue: &Queue<T>) {
-        // println!(
-        //     "[rust][read][{reason}] queue_len={} working={} stuck={} full={} empty={}",
-        //     queue.len(),
-        //     queue.working(),
-        //     queue.stuck(),
-        //     queue.is_full(),
-        //     queue.is_empty()
-        // );
+        println!(
+            "[rust][read][{reason}] queue_len={} working={} stuck={} full={} empty={}",
+            queue.len(),
+            queue.working(),
+            queue.stuck(),
+            queue.is_full(),
+            queue.is_empty()
+        );
     }
 
     pub fn pop(&mut self) -> Option<T> {
