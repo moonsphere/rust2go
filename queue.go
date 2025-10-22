@@ -259,6 +259,6 @@ func debugWriteStateLocked[T any](wq *WriteQueue[T], reason string) {
 }
 
 func debugReadState[T any](rq *ReadQueue[T], reason string) {
-	fmt.Printf("[go][read][%s] queue_len=%d working=%v stuck=%v empty=%v\n",
-		reason, rq.q.len(), rq.q.working(), rq.q.stuck(), rq.q.isEmpty())
+	// fmt.Printf("[go][read][%s] queue_len=%d working=%v stuck=%v empty=%v\n",
+	// 	reason, rq.q.len(), rq.q.working(), rq.q.stuck(), rq.q.isEmpty())
 }
